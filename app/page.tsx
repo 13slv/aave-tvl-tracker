@@ -1,10 +1,17 @@
 import { getTvlData } from "@/lib/tvl";
+import { getOnchainData } from "@/lib/onchain";
 import TvlDashboard from "@/components/TvlDashboard";
 
 export const revalidate = 3600;
 
 export default async function Home() {
-  const data = await getTvlData();
+  const [defiLlama, onchain] = await Promise.allSettled([
+    getTvlData(),
+    getOnchainData(),
+  ]);
+
+  const defiLlamaData = defiLlama.status === "fulfilled" ? defiLlama.value : null;
+  const onchainData = onchain.status === "fulfilled" ? onchain.value : null;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100">
@@ -15,7 +22,8 @@ export default async function Home() {
           </h1>
           <p className="mt-2 text-zinc-600 dark:text-zinc-400">
             Daily TVL across chains and assets around the April 18, 2026
-            KelpDAO/LayerZero bridge exploit. Data:{" "}
+            KelpDAO/LayerZero bridge exploit. Compare aggregator-sourced data
+            (
             <a
               href="https://defillama.com/protocol/aave-v3"
               target="_blank"
@@ -24,17 +32,22 @@ export default async function Home() {
             >
               DefiLlama
             </a>
-            , refreshed hourly.
+            ) with direct on-chain reads via Alchemy RPC.
           </p>
         </header>
 
-        <TvlDashboard data={data} />
+        <TvlDashboard
+          defiLlamaData={defiLlamaData}
+          onchainData={onchainData}
+        />
 
         <footer className="mt-12 pt-6 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500">
           <p>
             Hack: ~$292M rsETH drained via 1-of-1 DVN in KelpDAO&apos;s
             LayerZero OFT bridge. Aave bad debt est. $124-230M. Baseline
-            column highlighted = last snapshot before exploit.
+            column = last snapshot before exploit. On-chain data covers 5
+            chains (Ethereum, Arbitrum, Base, Mantle, Optimism), refreshed
+            daily via GitHub Actions.
           </p>
         </footer>
       </main>

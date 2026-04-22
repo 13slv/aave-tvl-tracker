@@ -1,0 +1,42 @@
+name: Refresh on-chain snapshot
+
+on:
+  schedule:
+    - cron: "15 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Refresh on-chain snapshot
+        env:
+          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+        run: npx tsx scripts/onchain-multichain.ts --out public/data/onchain.json
+
+      - name: Commit updated snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet public/data/onchain.json; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git add public/data/onchain.json
+          git commit -m "chore: refresh on-chain snapshot $(date -u +%Y-%m-%d)"
+          git push
