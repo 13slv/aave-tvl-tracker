@@ -1,4 +1,4 @@
-import type { TvlData, Row } from "./tvl";
+import type { TvlData, Row, Metric } from "./tvl";
 
 type OnchainSnapshot = {
   generatedAt: string;
@@ -12,57 +12,62 @@ type OnchainSnapshot = {
   assetsAggregated: { symbol: string; values: number[] }[];
 };
 
-function deltaPct(baseline: number, latest: number): number | null {
-  if (!baseline) return null;
-  return ((latest - baseline) / Math.abs(baseline)) * 100;
-}
-
 function formatLabel(dateIso: string): string {
   const d = new Date(dateIso + "T00:00:00Z");
   const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
   return `${month} ${d.getUTCDate()}`;
 }
 
+function sumAcross(rows: Row[], metric: Metric, len: number): number[] {
+  const out = new Array(len).fill(0);
+  for (const r of rows)
+    for (let i = 0; i < len; i++) out[i] += r[metric][i] ?? 0;
+  return out;
+}
+
 export function onchainToTvlData(snapshot: OnchainSnapshot): TvlData {
   const hackIdx = snapshot.hackDateIndex;
+  const N = snapshot.dates.length;
   const dateLabels = snapshot.dates.map(formatLabel);
 
   const chains: Row[] = snapshot.chains.map((c) => {
-    const values = c.totals;
-    const baseline = values[hackIdx];
-    const latest = values[values.length - 1];
-    return {
-      name: c.name,
-      values,
-      baseline,
-      latest,
-      deltaPct: deltaPct(baseline, latest),
-    };
+    const supplied = new Array(N).fill(0);
+    const borrowed = new Array(N).fill(0);
+    for (const a of c.assets) {
+      for (let i = 0; i < N; i++) {
+        supplied[i] += a.supplied[i] ?? 0;
+        borrowed[i] += a.borrowed[i] ?? 0;
+      }
+    }
+    const net = supplied.map((v, i) => v - borrowed[i]);
+    return { name: c.name, net, supplied, borrowed };
   });
-  chains.sort((a, b) => (b.baseline ?? 0) - (a.baseline ?? 0));
+  chains.sort((a, b) => b.supplied[hackIdx] - a.supplied[hackIdx]);
 
-  const assets: Row[] = snapshot.assetsAggregated
-    .map((a) => {
-      const values = a.values;
-      const baseline = values[hackIdx];
-      const latest = values[values.length - 1];
-      return {
-        name: a.symbol,
-        values,
-        baseline,
-        latest,
-        deltaPct: deltaPct(baseline, latest),
-      };
+  const assetMap = new Map<string, { supplied: number[]; borrowed: number[] }>();
+  for (const c of snapshot.chains) {
+    for (const a of c.assets) {
+      if (!assetMap.has(a.symbol)) {
+        assetMap.set(a.symbol, {
+          supplied: new Array(N).fill(0),
+          borrowed: new Array(N).fill(0),
+        });
+      }
+      const acc = assetMap.get(a.symbol)!;
+      for (let i = 0; i < N; i++) {
+        acc.supplied[i] += a.supplied[i] ?? 0;
+        acc.borrowed[i] += a.borrowed[i] ?? 0;
+      }
+    }
+  }
+
+  const assets: Row[] = Array.from(assetMap.entries())
+    .map(([name, v]) => {
+      const net = v.supplied.map((s, i) => s - v.borrowed[i]);
+      return { name, net, supplied: v.supplied, borrowed: v.borrowed };
     })
-    .filter((r) => Math.abs(r.baseline ?? 0) >= 10_000_000)
-    .sort((a, b) => (b.baseline ?? 0) - (a.baseline ?? 0));
-
-  const chainTotals = snapshot.dates.map((_, i) =>
-    chains.reduce((s, r) => s + (r.values[i] ?? 0), 0)
-  );
-  const assetTotals = snapshot.dates.map((_, i) =>
-    assets.reduce((s, r) => s + (r.values[i] ?? 0), 0)
-  );
+    .filter((r) => r.supplied[hackIdx] >= 10_000_000)
+    .sort((a, b) => b.supplied[hackIdx] - a.supplied[hackIdx]);
 
   return {
     updatedAt: snapshot.generatedAt,
@@ -71,12 +76,16 @@ export function onchainToTvlData(snapshot: OnchainSnapshot): TvlData {
     hackDateIso: snapshot.dates[hackIdx],
     chains,
     assets,
-    chainTotals,
-    assetTotals,
-    chainTotalDeltaPct:
-      deltaPct(chainTotals[hackIdx], chainTotals[chainTotals.length - 1]) ?? 0,
-    assetTotalDeltaPct:
-      deltaPct(assetTotals[hackIdx], assetTotals[assetTotals.length - 1]) ?? 0,
+    chainTotals: {
+      net: sumAcross(chains, "net", N),
+      supplied: sumAcross(chains, "supplied", N),
+      borrowed: sumAcross(chains, "borrowed", N),
+    },
+    assetTotals: {
+      net: sumAcross(assets, "net", N),
+      supplied: sumAcross(assets, "supplied", N),
+      borrowed: sumAcross(assets, "borrowed", N),
+    },
   };
 }
 

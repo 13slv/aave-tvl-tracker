@@ -11,7 +11,7 @@ import {
   ReferenceLine,
   CartesianGrid,
 } from "recharts";
-import type { Row } from "@/lib/tvl";
+import type { Row, Metric } from "@/lib/tvl";
 
 const COLORS = [
   "#3b82f6",
@@ -25,14 +25,17 @@ const COLORS = [
 ];
 
 function fmtAxis(v: number): string {
-  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-  if (v >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
-  if (v >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
-  return `$${v.toFixed(0)}`;
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(0)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
 }
 
 type Props = {
   rows: Row[];
+  metric: Metric;
   dates: string[];
   hackDateIndex: number;
   totals: number[];
@@ -41,6 +44,7 @@ type Props = {
 
 export default function TvlChart({
   rows,
+  metric,
   dates,
   hackDateIndex,
   totals,
@@ -53,7 +57,7 @@ export default function TvlChart({
       TOTAL: totals[i] ?? 0,
     };
     for (const row of top) {
-      point[row.name] = row.values[i] ?? 0;
+      point[row.name] = row[metric][i] ?? 0;
     }
     return point;
   });

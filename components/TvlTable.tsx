@@ -1,4 +1,4 @@
-import type { Row } from "@/lib/tvl";
+import type { Row, Metric } from "@/lib/tvl";
 
 function fmtUsd(v: number | null): string {
   if (v === null) return "—";
@@ -7,6 +7,7 @@ function fmtUsd(v: number | null): string {
   if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
   if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
+  if (abs < 1) return "—";
   return `${sign}$${abs.toFixed(0)}`;
 }
 
@@ -25,23 +26,32 @@ function deltaClass(v: number | null): string {
   return "text-zinc-500";
 }
 
+function deltaPct(baseline: number, latest: number): number | null {
+  if (!baseline) return null;
+  return ((latest - baseline) / Math.abs(baseline)) * 100;
+}
+
 type Props = {
   rows: Row[];
+  metric: Metric;
   dates: string[];
   hackDateIndex: number;
   totals: number[];
-  totalDeltaPct: number;
   nameHeader: string;
 };
 
 export default function TvlTable({
   rows,
+  metric,
   dates,
   hackDateIndex,
   totals,
-  totalDeltaPct,
   nameHeader,
 }: Props) {
+  const totalBaseline = totals[hackDateIndex];
+  const totalLatest = totals[totals.length - 1];
+  const totalDelta = deltaPct(totalBaseline, totalLatest);
+
   return (
     <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
       <table className="min-w-full text-sm">
@@ -71,35 +81,41 @@ export default function TvlTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.name}
-              className="border-t border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
-            >
-              <td className="px-3 py-2 font-medium sticky left-0 bg-white dark:bg-black">
-                {row.name}
-              </td>
-              {row.values.map((v, i) => (
-                <td
-                  key={i}
-                  className={`px-3 py-2 text-right tabular-nums whitespace-nowrap ${
-                    i === hackDateIndex
-                      ? "bg-amber-50 dark:bg-amber-900/10 font-semibold"
-                      : ""
-                  }`}
-                >
-                  {fmtUsd(v)}
-                </td>
-              ))}
-              <td
-                className={`px-3 py-2 text-right tabular-nums whitespace-nowrap ${deltaClass(
-                  row.deltaPct
-                )}`}
+          {rows.map((row) => {
+            const values = row[metric];
+            const baseline = values[hackDateIndex];
+            const latest = values[values.length - 1];
+            const delta = deltaPct(baseline, latest);
+            return (
+              <tr
+                key={row.name}
+                className="border-t border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
               >
-                {fmtPct(row.deltaPct)}
-              </td>
-            </tr>
-          ))}
+                <td className="px-3 py-2 font-medium sticky left-0 bg-white dark:bg-black">
+                  {row.name}
+                </td>
+                {values.map((v, i) => (
+                  <td
+                    key={i}
+                    className={`px-3 py-2 text-right tabular-nums whitespace-nowrap ${
+                      i === hackDateIndex
+                        ? "bg-amber-50 dark:bg-amber-900/10 font-semibold"
+                        : ""
+                    }`}
+                  >
+                    {fmtUsd(v)}
+                  </td>
+                ))}
+                <td
+                  className={`px-3 py-2 text-right tabular-nums whitespace-nowrap ${deltaClass(
+                    delta
+                  )}`}
+                >
+                  {fmtPct(delta)}
+                </td>
+              </tr>
+            );
+          })}
           <tr className="border-t-2 border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 font-semibold">
             <td className="px-3 py-2 sticky left-0 bg-zinc-50 dark:bg-zinc-900">
               TOTAL
@@ -118,10 +134,10 @@ export default function TvlTable({
             ))}
             <td
               className={`px-3 py-2 text-right tabular-nums whitespace-nowrap ${deltaClass(
-                totalDeltaPct
+                totalDelta
               )}`}
             >
-              {fmtPct(totalDeltaPct)}
+              {fmtPct(totalDelta)}
             </td>
           </tr>
         </tbody>

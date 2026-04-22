@@ -5,12 +5,13 @@ const HACK_TS = Math.floor(Date.UTC(2026, 3, 18) / 1000);
 const DAYS_BEFORE_HACK = 3;
 const SECONDS_PER_DAY = 86400;
 
+export type Metric = "net" | "supplied" | "borrowed";
+
 export type Row = {
   name: string;
-  values: (number | null)[];
-  baseline: number | null;
-  latest: number | null;
-  deltaPct: number | null;
+  net: number[];
+  supplied: number[];
+  borrowed: number[];
 };
 
 export type TvlData = {
@@ -20,10 +21,8 @@ export type TvlData = {
   hackDateIso: string;
   chains: Row[];
   assets: Row[];
-  chainTotals: number[];
-  assetTotals: number[];
-  chainTotalDeltaPct: number;
-  assetTotalDeltaPct: number;
+  chainTotals: Record<Metric, number[]>;
+  assetTotals: Record<Metric, number[]>;
 };
 
 type TokenMap = Record<string, number>;
@@ -44,16 +43,12 @@ function formatDateLabel(ts: number): string {
   return `${month} ${day}`;
 }
 
-function deltaPct(baseline: number | null, latest: number | null): number | null {
-  if (!baseline || baseline === 0 || latest === null) return null;
-  return ((latest - baseline) / baseline) * 100;
-}
-
 function findSnapshot<T extends { date: number }>(
-  series: T[],
+  series: T[] | undefined,
   targetTs: number,
   toleranceSec = 12 * 3600
 ): T | null {
+  if (!series) return null;
   let best: T | null = null;
   let bestDist = Infinity;
   for (const p of series) {
@@ -79,6 +74,13 @@ function buildTargetTimestamps(latestTs: number): number[] {
   return targets;
 }
 
+function sumAcross(rows: Row[], metric: Metric, len: number): number[] {
+  const out = new Array(len).fill(0);
+  for (const r of rows)
+    for (let i = 0; i < len; i++) out[i] += r[metric][i] ?? 0;
+  return out;
+}
+
 export async function getTvlData(): Promise<TvlData> {
   const res = await fetch(DEFILLAMA_URL, {
     next: { revalidate: 3600 },
@@ -98,67 +100,71 @@ export async function getTvlData(): Promise<TvlData> {
   const targetTs = buildTargetTimestamps(latestTs);
   const dateLabels = targetTs.map(formatDateLabel);
   const hackDateIndex = targetTs.findIndex(
-    (ts) => Math.floor(ts / SECONDS_PER_DAY) === Math.floor(HACK_TS / SECONDS_PER_DAY)
+    (ts) =>
+      Math.floor(ts / SECONDS_PER_DAY) === Math.floor(HACK_TS / SECONDS_PER_DAY)
   );
+  const N = targetTs.length;
 
   const chainRows: Row[] = [];
-  const assetTotals: Record<string, number[]> = {};
+  const assetNet: Record<string, number[]> = {};
+  const assetBor: Record<string, number[]> = {};
 
   for (const [rawKey, chainData] of Object.entries(data.chainTvls)) {
     if (rawKey.endsWith("-borrowed") || rawKey === "borrowed") continue;
 
-    const tvlValues: (number | null)[] = targetTs.map((ts) => {
-      const snap = findSnapshot(chainData.tvl ?? [], ts);
-      return snap ? snap.totalLiquidityUSD : null;
+    const borrowedChain = data.chainTvls[`${rawKey}-borrowed`];
+
+    const net = targetTs.map((ts) => {
+      const snap = findSnapshot(chainData.tvl, ts);
+      return snap ? snap.totalLiquidityUSD : 0;
     });
-    const baseline = hackDateIndex >= 0 ? tvlValues[hackDateIndex] : null;
-    const latest = tvlValues[tvlValues.length - 1];
-    if (baseline !== null && baseline > 0) {
+    const borrowed = targetTs.map((ts) => {
+      const snap = findSnapshot(borrowedChain?.tvl, ts);
+      return snap ? snap.totalLiquidityUSD : 0;
+    });
+    const supplied = net.map((v, i) => v + borrowed[i]);
+
+    if (supplied[hackDateIndex] > 0) {
       chainRows.push({
         name: rawKey === "xDai" ? "Gnosis" : rawKey,
-        values: tvlValues,
-        baseline,
-        latest,
-        deltaPct: deltaPct(baseline, latest),
+        net,
+        supplied,
+        borrowed,
       });
     }
 
-    const tokensSeries = chainData.tokensInUsd ?? [];
-    for (let i = 0; i < targetTs.length; i++) {
-      const snap = findSnapshot(tokensSeries, targetTs[i]);
-      if (!snap) continue;
-      for (const [asset, usd] of Object.entries(snap.tokens)) {
-        if (!assetTotals[asset]) {
-          assetTotals[asset] = new Array(targetTs.length).fill(0);
+    for (let i = 0; i < N; i++) {
+      const netSnap = findSnapshot(chainData.tokensInUsd, targetTs[i]);
+      const borSnap = findSnapshot(borrowedChain?.tokensInUsd, targetTs[i]);
+      if (netSnap) {
+        for (const [asset, usd] of Object.entries(netSnap.tokens)) {
+          if (!assetNet[asset]) assetNet[asset] = new Array(N).fill(0);
+          assetNet[asset][i] += usd;
         }
-        assetTotals[asset][i] += usd;
+      }
+      if (borSnap) {
+        for (const [asset, usd] of Object.entries(borSnap.tokens)) {
+          if (!assetBor[asset]) assetBor[asset] = new Array(N).fill(0);
+          assetBor[asset][i] += usd;
+        }
       }
     }
   }
 
-  chainRows.sort((a, b) => (b.baseline ?? 0) - (a.baseline ?? 0));
+  chainRows.sort(
+    (a, b) => b.supplied[hackDateIndex] - a.supplied[hackDateIndex]
+  );
 
-  const assetRows: Row[] = Object.entries(assetTotals)
-    .map(([name, values]) => {
-      const baseline = hackDateIndex >= 0 ? values[hackDateIndex] : null;
-      const latest = values[values.length - 1];
-      return {
-        name,
-        values,
-        baseline,
-        latest,
-        deltaPct: deltaPct(baseline, latest),
-      };
+  const allAssets = new Set([...Object.keys(assetNet), ...Object.keys(assetBor)]);
+  const assetRows: Row[] = [...allAssets]
+    .map((name) => {
+      const net = assetNet[name] ?? new Array(N).fill(0);
+      const borrowed = assetBor[name] ?? new Array(N).fill(0);
+      const supplied = net.map((v, i) => v + borrowed[i]);
+      return { name, net, supplied, borrowed };
     })
-    .filter((r) => (r.baseline ?? 0) >= 10_000_000)
-    .sort((a, b) => (b.baseline ?? 0) - (a.baseline ?? 0));
-
-  const chainTotals = targetTs.map((_, i) =>
-    chainRows.reduce((sum, r) => sum + (r.values[i] ?? 0), 0)
-  );
-  const assetTotals_ = targetTs.map((_, i) =>
-    assetRows.reduce((sum, r) => sum + (r.values[i] ?? 0), 0)
-  );
+    .filter((r) => (r.supplied[hackDateIndex] ?? 0) >= 10_000_000)
+    .sort((a, b) => b.supplied[hackDateIndex] - a.supplied[hackDateIndex]);
 
   return {
     updatedAt: new Date(latestTs * 1000).toISOString(),
@@ -167,11 +173,15 @@ export async function getTvlData(): Promise<TvlData> {
     hackDateIso: HACK_DATE_ISO,
     chains: chainRows,
     assets: assetRows,
-    chainTotals,
-    assetTotals: assetTotals_,
-    chainTotalDeltaPct:
-      deltaPct(chainTotals[hackDateIndex] ?? null, chainTotals[chainTotals.length - 1]) ?? 0,
-    assetTotalDeltaPct:
-      deltaPct(assetTotals_[hackDateIndex] ?? null, assetTotals_[assetTotals_.length - 1]) ?? 0,
+    chainTotals: {
+      net: sumAcross(chainRows, "net", N),
+      supplied: sumAcross(chainRows, "supplied", N),
+      borrowed: sumAcross(chainRows, "borrowed", N),
+    },
+    assetTotals: {
+      net: sumAcross(assetRows, "net", N),
+      supplied: sumAcross(assetRows, "supplied", N),
+      borrowed: sumAcross(assetRows, "borrowed", N),
+    },
   };
 }
