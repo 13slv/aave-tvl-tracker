@@ -1,6 +1,6 @@
-import type { TvlData, Row, Metric } from "./tvl";
+import type { TvlData, Row, Metric, Protocol } from "./tvl";
 
-type OnchainSnapshot = {
+type AaveSnapshot = {
   generatedAt: string;
   dates: string[];
   hackDateIndex: number;
@@ -11,6 +11,8 @@ type OnchainSnapshot = {
   }[];
   assetsAggregated: { symbol: string; values: number[] }[];
 };
+
+type MorphoSnapshot = AaveSnapshot;
 
 function formatLabel(dateIso: string): string {
   const d = new Date(dateIso + "T00:00:00Z");
@@ -25,12 +27,12 @@ function sumAcross(rows: Row[], metric: Metric, len: number): number[] {
   return out;
 }
 
-export function onchainToTvlData(snapshot: OnchainSnapshot): TvlData {
-  const hackIdx = snapshot.hackDateIndex;
-  const N = snapshot.dates.length;
-  const dateLabels = snapshot.dates.map(formatLabel);
-
-  const chains: Row[] = snapshot.chains.map((c) => {
+function buildChainsFromSnapshot(
+  snap: AaveSnapshot,
+  protocol: Protocol,
+  N: number
+): Row[] {
+  return snap.chains.map((c) => {
     const supplied = new Array(N).fill(0);
     const borrowed = new Array(N).fill(0);
     for (const a of c.assets) {
@@ -40,40 +42,83 @@ export function onchainToTvlData(snapshot: OnchainSnapshot): TvlData {
       }
     }
     const net = supplied.map((v, i) => v - borrowed[i]);
-    return { name: c.name, net, supplied, borrowed };
+    return { name: c.name, protocol, net, supplied, borrowed };
   });
-  chains.sort((a, b) => b.supplied[hackIdx] - a.supplied[hackIdx]);
+}
 
-  const assetMap = new Map<string, { supplied: number[]; borrowed: number[] }>();
-  for (const c of snapshot.chains) {
+function buildAssetsFromSnapshot(
+  snap: AaveSnapshot,
+  protocol: Protocol,
+  N: number
+): Row[] {
+  const map = new Map<string, { supplied: number[]; borrowed: number[] }>();
+  for (const c of snap.chains) {
     for (const a of c.assets) {
-      if (!assetMap.has(a.symbol)) {
-        assetMap.set(a.symbol, {
+      if (!map.has(a.symbol)) {
+        map.set(a.symbol, {
           supplied: new Array(N).fill(0),
           borrowed: new Array(N).fill(0),
         });
       }
-      const acc = assetMap.get(a.symbol)!;
+      const acc = map.get(a.symbol)!;
       for (let i = 0; i < N; i++) {
         acc.supplied[i] += a.supplied[i] ?? 0;
         acc.borrowed[i] += a.borrowed[i] ?? 0;
       }
     }
   }
+  return Array.from(map.entries()).map(([name, v]) => ({
+    name,
+    protocol,
+    net: v.supplied.map((s, i) => s - v.borrowed[i]),
+    supplied: v.supplied,
+    borrowed: v.borrowed,
+  }));
+}
 
-  const assets: Row[] = Array.from(assetMap.entries())
-    .map(([name, v]) => {
-      const net = v.supplied.map((s, i) => s - v.borrowed[i]);
-      return { name, net, supplied: v.supplied, borrowed: v.borrowed };
-    })
+export async function getOnchainData(): Promise<TvlData> {
+  const { readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+
+  const aavePath = join(process.cwd(), "public", "data", "onchain.json");
+  const morphoPath = join(process.cwd(), "public", "data", "morpho-onchain.json");
+
+  const [aaveRaw, morphoRaw] = await Promise.allSettled([
+    readFile(aavePath, "utf-8"),
+    readFile(morphoPath, "utf-8"),
+  ]);
+
+  if (aaveRaw.status !== "fulfilled") {
+    throw new Error("public/data/onchain.json missing");
+  }
+  const aave = JSON.parse(aaveRaw.value) as AaveSnapshot;
+  const morpho =
+    morphoRaw.status === "fulfilled"
+      ? (JSON.parse(morphoRaw.value) as MorphoSnapshot)
+      : null;
+
+  const dates = aave.dates;
+  const hackIdx = aave.hackDateIndex;
+  const N = dates.length;
+  const dateLabels = dates.map(formatLabel);
+
+  const chains: Row[] = [
+    ...buildChainsFromSnapshot(aave, "aave", N),
+    ...(morpho ? buildChainsFromSnapshot(morpho, "morpho", N) : []),
+  ].sort((a, b) => b.supplied[hackIdx] - a.supplied[hackIdx]);
+
+  const assets: Row[] = [
+    ...buildAssetsFromSnapshot(aave, "aave", N),
+    ...(morpho ? buildAssetsFromSnapshot(morpho, "morpho", N) : []),
+  ]
     .filter((r) => r.supplied[hackIdx] >= 10_000_000)
     .sort((a, b) => b.supplied[hackIdx] - a.supplied[hackIdx]);
 
   return {
-    updatedAt: snapshot.generatedAt,
+    updatedAt: aave.generatedAt,
     dates: dateLabels,
     hackDateIndex: hackIdx,
-    hackDateIso: snapshot.dates[hackIdx],
+    hackDateIso: dates[hackIdx],
     chains,
     assets,
     chainTotals: {
@@ -87,13 +132,4 @@ export function onchainToTvlData(snapshot: OnchainSnapshot): TvlData {
       borrowed: sumAcross(assets, "borrowed", N),
     },
   };
-}
-
-export async function getOnchainData(): Promise<TvlData> {
-  const { readFile } = await import("node:fs/promises");
-  const { join } = await import("node:path");
-  const path = join(process.cwd(), "public", "data", "onchain.json");
-  const raw = await readFile(path, "utf-8");
-  const snapshot = JSON.parse(raw) as OnchainSnapshot;
-  return onchainToTvlData(snapshot);
 }

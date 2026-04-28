@@ -1,4 +1,26 @@
-import type { Row, Metric } from "@/lib/tvl";
+import type { Row, Metric, Protocol } from "@/lib/tvl";
+
+const PROTOCOL_STYLES: Record<Protocol, string> = {
+  aave:
+    "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+  morpho:
+    "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800",
+};
+
+const PROTOCOL_LABELS: Record<Protocol, string> = {
+  aave: "Aave",
+  morpho: "Morpho",
+};
+
+function ProtocolBadge({ protocol }: { protocol: Protocol }) {
+  return (
+    <span
+      className={`ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] rounded border ${PROTOCOL_STYLES[protocol]}`}
+    >
+      {PROTOCOL_LABELS[protocol]}
+    </span>
+  );
+}
 
 function fmtUsd(v: number | null): string {
   if (v === null) return "—";
@@ -91,8 +113,9 @@ export default function TvlTable({
                 key={row.name}
                 className="border-t border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
               >
-                <td className="px-3 py-2 font-medium sticky left-0 bg-white dark:bg-black">
+                <td className="px-3 py-2 font-medium sticky left-0 bg-white dark:bg-black whitespace-nowrap">
                   {row.name}
+                  <ProtocolBadge protocol={row.protocol} />
                 </td>
                 {values.map((v, i) => (
                   <td

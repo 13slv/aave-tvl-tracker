@@ -6,9 +6,11 @@ const DAYS_BEFORE_HACK = 3;
 const SECONDS_PER_DAY = 86400;
 
 export type Metric = "net" | "supplied" | "borrowed";
+export type Protocol = "aave" | "morpho";
 
 export type Row = {
   name: string;
+  protocol: Protocol;
   net: number[];
   supplied: number[];
   borrowed: number[];
@@ -127,6 +129,7 @@ export async function getTvlData(): Promise<TvlData> {
     if (supplied[hackDateIndex] > 0) {
       chainRows.push({
         name: rawKey === "xDai" ? "Gnosis" : rawKey,
+        protocol: "aave",
         net,
         supplied,
         borrowed,
@@ -161,7 +164,7 @@ export async function getTvlData(): Promise<TvlData> {
       const net = assetNet[name] ?? new Array(N).fill(0);
       const borrowed = assetBor[name] ?? new Array(N).fill(0);
       const supplied = net.map((v, i) => v + borrowed[i]);
-      return { name, net, supplied, borrowed };
+      return { name, protocol: "aave" as const, net, supplied, borrowed };
     })
     .filter((r) => (r.supplied[hackDateIndex] ?? 0) >= 10_000_000)
     .sort((a, b) => b.supplied[hackDateIndex] - a.supplied[hackDateIndex]);

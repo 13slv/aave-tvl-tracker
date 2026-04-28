@@ -51,13 +51,15 @@ export default function TvlChart({
   topN = 5,
 }: Props) {
   const top = rows.slice(0, topN);
+  const labelOf = (r: Row) =>
+    `${r.name} (${r.protocol === "aave" ? "Aave" : "Morpho"})`;
   const chartData = dates.map((date, i) => {
     const point: Record<string, string | number> = {
       date,
       TOTAL: totals[i] ?? 0,
     };
     for (const row of top) {
-      point[row.name] = row[metric][i] ?? 0;
+      point[labelOf(row)] = row[metric][i] ?? 0;
     }
     return point;
   });
@@ -109,16 +111,19 @@ export default function TvlChart({
             strokeWidth={2.5}
             dot={false}
           />
-          {top.map((row, idx) => (
-            <Line
-              key={row.name}
-              type="monotone"
-              dataKey={row.name}
-              stroke={COLORS[idx % COLORS.length]}
-              strokeWidth={1.5}
-              dot={false}
-            />
-          ))}
+          {top.map((row, idx) => {
+            const k = labelOf(row);
+            return (
+              <Line
+                key={k}
+                type="monotone"
+                dataKey={k}
+                stroke={COLORS[idx % COLORS.length]}
+                strokeWidth={1.5}
+                dot={false}
+              />
+            );
+          })}
         </LineChart>
       </ResponsiveContainer>
     </div>
