@@ -6,7 +6,7 @@ const DAYS_BEFORE_HACK = 3;
 const SECONDS_PER_DAY = 86400;
 
 export type Metric = "net" | "supplied" | "borrowed";
-export type Protocol = "aave" | "morpho";
+export type Protocol = "aave" | "morpho" | "spark";
 
 export type Row = {
   name: string;

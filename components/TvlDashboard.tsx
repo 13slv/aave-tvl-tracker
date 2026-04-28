@@ -28,6 +28,7 @@ const METRIC_DESC: Record<Metric, string> = {
 const PROTOCOL_LABELS: Record<Protocol, string> = {
   aave: "Aave V3",
   morpho: "Morpho",
+  spark: "Spark",
 };
 
 function computeTotals(
@@ -56,12 +57,16 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
     return data.assets.some((r) => r.protocol === "morpho");
   }, [data]);
 
-  // If user picked Morpho but switched to DefiLlama (no Morpho there), reset
+  const sparkAvailable = useMemo(() => {
+    if (!data) return false;
+    return data.assets.some((r) => r.protocol === "spark");
+  }, [data]);
+
+  // If user picked unavailable protocol, fall back to Aave
   useEffect(() => {
-    if (protocol === "morpho" && !morphoAvailable) {
-      setProtocol("aave");
-    }
-  }, [morphoAvailable, protocol]);
+    if (protocol === "morpho" && !morphoAvailable) setProtocol("aave");
+    if (protocol === "spark" && !sparkAvailable) setProtocol("aave");
+  }, [morphoAvailable, sparkAvailable, protocol]);
 
   if (!data) {
     return (
@@ -91,7 +96,7 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
     active: boolean;
     onClick: () => void;
     disabled?: boolean;
-    color?: "zinc" | "blue" | "emerald" | "purple" | "cyan";
+    color?: "zinc" | "blue" | "emerald" | "purple" | "cyan" | "amber";
     children: React.ReactNode;
   }) => {
     const activeColors = {
@@ -100,6 +105,7 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
       emerald: "bg-emerald-600 text-white",
       purple: "bg-purple-600 text-white",
       cyan: "bg-cyan-600 text-white",
+      amber: "bg-amber-600 text-white",
     };
     return (
       <button
@@ -155,6 +161,14 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
             >
               {PROTOCOL_LABELS.morpho}
             </Button>
+            <Button
+              active={protocol === "spark"}
+              onClick={() => setProtocol("spark")}
+              disabled={!sparkAvailable}
+              color="amber"
+            >
+              {PROTOCOL_LABELS.spark}
+            </Button>
           </div>
 
           <div className="inline-flex rounded-lg border border-zinc-300 dark:border-zinc-700 p-1 bg-white dark:bg-zinc-900">
@@ -193,8 +207,8 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
       {filteredRows.length === 0 ? (
         <div className="p-6 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400">
           No {PROTOCOL_LABELS[protocol]} data in {source === "defillama" ? "DefiLlama" : "on-chain"} source.
-          {protocol === "morpho" && source === "defillama" && (
-            <> Switch to On-chain to see Morpho.</>
+          {(protocol === "morpho" || protocol === "spark") && source === "defillama" && (
+            <> Switch to On-chain to see {PROTOCOL_LABELS[protocol]}.</>
           )}
         </div>
       ) : (

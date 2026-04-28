@@ -53,10 +53,12 @@ export default function TvlChart({
   showProtocol = true,
 }: Props) {
   const top = rows.slice(0, topN);
-  const labelOf = (r: Row) =>
-    showProtocol
-      ? `${r.name} (${r.protocol === "aave" ? "Aave" : "Morpho"})`
-      : r.name;
+  const labelOf = (r: Row) => {
+    if (!showProtocol) return r.name;
+    const label =
+      r.protocol === "aave" ? "Aave" : r.protocol === "morpho" ? "Morpho" : "Spark";
+    return `${r.name} (${label})`;
+  };
   const chartData = dates.map((date, i) => {
     const point: Record<string, string | number> = {
       date,

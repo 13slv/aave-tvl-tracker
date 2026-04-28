@@ -34,14 +34,19 @@ jobs:
           ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
         run: npx tsx scripts/onchain-morpho.ts --out public/data/morpho-onchain.json
 
+      - name: Refresh Spark on-chain snapshot
+        env:
+          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+        run: npx tsx scripts/onchain-spark.ts --out public/data/spark-onchain.json
+
       - name: Commit updated snapshots
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet public/data/onchain.json public/data/morpho-onchain.json; then
+          if git diff --quiet public/data/onchain.json public/data/morpho-onchain.json public/data/spark-onchain.json; then
             echo "No changes to commit"
             exit 0
           fi
-          git add public/data/onchain.json public/data/morpho-onchain.json
+          git add public/data/onchain.json public/data/morpho-onchain.json public/data/spark-onchain.json
           git commit -m "chore: refresh on-chain snapshots $(date -u +%Y-%m-%d)"
           git push
