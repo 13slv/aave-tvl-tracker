@@ -55,15 +55,14 @@ export default function TvlChart({
   const top = rows.slice(0, topN);
   const labelOf = (r: Row) => {
     if (!showProtocol) return r.name;
-    const label =
-      r.protocol === "aave"
-        ? "Aave"
-        : r.protocol === "morpho"
-          ? "Morpho"
-          : r.protocol === "spark"
-            ? "Spark"
-            : "Fluid";
-    return `${r.name} (${label})`;
+    const labels: Record<typeof r.protocol, string> = {
+      aave: "Aave",
+      morpho: "Morpho",
+      spark: "Spark",
+      fluid: "Fluid",
+      compound: "Compound",
+    };
+    return `${r.name} (${labels[r.protocol]})`;
   };
   const chartData = dates.map((date, i) => {
     const point: Record<string, string | number> = {

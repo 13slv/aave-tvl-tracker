@@ -9,6 +9,8 @@ const PROTOCOL_STYLES: Record<Protocol, string> = {
     "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800",
   fluid:
     "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800",
+  compound:
+    "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border-green-200 dark:border-green-800",
 };
 
 const PROTOCOL_LABELS: Record<Protocol, string> = {
@@ -16,6 +18,7 @@ const PROTOCOL_LABELS: Record<Protocol, string> = {
   morpho: "Morpho",
   spark: "Spark",
   fluid: "Fluid",
+  compound: "Compound",
 };
 
 function ProtocolBadge({ protocol }: { protocol: Protocol }) {

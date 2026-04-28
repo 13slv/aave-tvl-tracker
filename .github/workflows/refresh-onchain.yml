@@ -44,11 +44,16 @@ jobs:
           ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
         run: npx tsx scripts/onchain-fluid.ts --out public/data/fluid-onchain.json
 
+      - name: Refresh Compound on-chain snapshot
+        env:
+          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+        run: npx tsx scripts/onchain-compound.ts --out public/data/compound-onchain.json
+
       - name: Commit updated snapshots
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          FILES="public/data/onchain.json public/data/morpho-onchain.json public/data/spark-onchain.json public/data/fluid-onchain.json"
+          FILES="public/data/onchain.json public/data/morpho-onchain.json public/data/spark-onchain.json public/data/fluid-onchain.json public/data/compound-onchain.json"
           if git diff --quiet $FILES; then
             echo "No changes to commit"
             exit 0

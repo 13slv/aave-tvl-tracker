@@ -30,6 +30,7 @@ const PROTOCOL_LABELS: Record<Protocol, string> = {
   morpho: "Morpho",
   spark: "Spark",
   fluid: "Fluid",
+  compound: "Compound V3",
 };
 
 function computeTotals(
@@ -68,12 +69,18 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
     return data.assets.some((r) => r.protocol === "fluid");
   }, [data]);
 
+  const compoundAvailable = useMemo(() => {
+    if (!data) return false;
+    return data.assets.some((r) => r.protocol === "compound");
+  }, [data]);
+
   // If user picked unavailable protocol, fall back to Aave
   useEffect(() => {
     if (protocol === "morpho" && !morphoAvailable) setProtocol("aave");
     if (protocol === "spark" && !sparkAvailable) setProtocol("aave");
     if (protocol === "fluid" && !fluidAvailable) setProtocol("aave");
-  }, [morphoAvailable, sparkAvailable, fluidAvailable, protocol]);
+    if (protocol === "compound" && !compoundAvailable) setProtocol("aave");
+  }, [morphoAvailable, sparkAvailable, fluidAvailable, compoundAvailable, protocol]);
 
   if (!data) {
     return (
@@ -103,7 +110,7 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
     active: boolean;
     onClick: () => void;
     disabled?: boolean;
-    color?: "zinc" | "blue" | "emerald" | "purple" | "cyan" | "amber" | "pink";
+    color?: "zinc" | "blue" | "emerald" | "purple" | "cyan" | "amber" | "pink" | "green";
     children: React.ReactNode;
   }) => {
     const activeColors = {
@@ -114,6 +121,7 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
       cyan: "bg-cyan-600 text-white",
       amber: "bg-amber-600 text-white",
       pink: "bg-pink-600 text-white",
+      green: "bg-green-700 text-white",
     };
     return (
       <button
@@ -184,6 +192,14 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
               color="pink"
             >
               {PROTOCOL_LABELS.fluid}
+            </Button>
+            <Button
+              active={protocol === "compound"}
+              onClick={() => setProtocol("compound")}
+              disabled={!compoundAvailable}
+              color="green"
+            >
+              {PROTOCOL_LABELS.compound}
             </Button>
           </div>
 
