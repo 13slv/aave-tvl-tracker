@@ -7,12 +7,15 @@ const PROTOCOL_STYLES: Record<Protocol, string> = {
     "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800",
   spark:
     "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+  fluid:
+    "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800",
 };
 
 const PROTOCOL_LABELS: Record<Protocol, string> = {
   aave: "Aave",
   morpho: "Morpho",
   spark: "Spark",
+  fluid: "Fluid",
 };
 
 function ProtocolBadge({ protocol }: { protocol: Protocol }) {

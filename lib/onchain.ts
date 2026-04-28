@@ -83,11 +83,13 @@ export async function getOnchainData(): Promise<TvlData> {
   const aavePath = join(process.cwd(), "public", "data", "onchain.json");
   const morphoPath = join(process.cwd(), "public", "data", "morpho-onchain.json");
   const sparkPath = join(process.cwd(), "public", "data", "spark-onchain.json");
+  const fluidPath = join(process.cwd(), "public", "data", "fluid-onchain.json");
 
-  const [aaveRaw, morphoRaw, sparkRaw] = await Promise.allSettled([
+  const [aaveRaw, morphoRaw, sparkRaw, fluidRaw] = await Promise.allSettled([
     readFile(aavePath, "utf-8"),
     readFile(morphoPath, "utf-8"),
     readFile(sparkPath, "utf-8"),
+    readFile(fluidPath, "utf-8"),
   ]);
 
   if (aaveRaw.status !== "fulfilled") {
@@ -102,6 +104,10 @@ export async function getOnchainData(): Promise<TvlData> {
     sparkRaw.status === "fulfilled"
       ? (JSON.parse(sparkRaw.value) as AaveSnapshot)
       : null;
+  const fluid =
+    fluidRaw.status === "fulfilled"
+      ? (JSON.parse(fluidRaw.value) as AaveSnapshot)
+      : null;
 
   const dates = aave.dates;
   const hackIdx = aave.hackDateIndex;
@@ -112,12 +118,14 @@ export async function getOnchainData(): Promise<TvlData> {
     ...buildChainsFromSnapshot(aave, "aave", N),
     ...(morpho ? buildChainsFromSnapshot(morpho, "morpho", N) : []),
     ...(spark ? buildChainsFromSnapshot(spark, "spark", N) : []),
+    ...(fluid ? buildChainsFromSnapshot(fluid, "fluid", N) : []),
   ].sort((a, b) => b.supplied[hackIdx] - a.supplied[hackIdx]);
 
   const assets: Row[] = [
     ...buildAssetsFromSnapshot(aave, "aave", N),
     ...(morpho ? buildAssetsFromSnapshot(morpho, "morpho", N) : []),
     ...(spark ? buildAssetsFromSnapshot(spark, "spark", N) : []),
+    ...(fluid ? buildAssetsFromSnapshot(fluid, "fluid", N) : []),
   ]
     .filter((r) => r.supplied[hackIdx] >= 10_000_000)
     .sort((a, b) => b.supplied[hackIdx] - a.supplied[hackIdx]);

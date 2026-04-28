@@ -56,7 +56,13 @@ export default function TvlChart({
   const labelOf = (r: Row) => {
     if (!showProtocol) return r.name;
     const label =
-      r.protocol === "aave" ? "Aave" : r.protocol === "morpho" ? "Morpho" : "Spark";
+      r.protocol === "aave"
+        ? "Aave"
+        : r.protocol === "morpho"
+          ? "Morpho"
+          : r.protocol === "spark"
+            ? "Spark"
+            : "Fluid";
     return `${r.name} (${label})`;
   };
   const chartData = dates.map((date, i) => {
