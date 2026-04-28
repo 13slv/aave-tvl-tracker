@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { TvlData, Metric } from "@/lib/tvl";
+import { useEffect, useMemo, useState } from "react";
+import type { TvlData, Metric, Protocol } from "@/lib/tvl";
 import TvlTable from "./TvlTable";
 import TvlChart from "./TvlChart";
 
@@ -25,36 +25,61 @@ const METRIC_DESC: Record<Metric, string> = {
   borrowed: "Total debt outstanding",
 };
 
+const PROTOCOL_LABELS: Record<Protocol, string> = {
+  aave: "Aave V3",
+  morpho: "Morpho",
+};
+
+function computeTotals(
+  rows: { net: number[]; supplied: number[]; borrowed: number[] }[],
+  metric: Metric,
+  N: number
+): number[] {
+  const out = new Array(N).fill(0);
+  for (const r of rows)
+    for (let i = 0; i < N; i++) out[i] += r[metric][i] ?? 0;
+  return out;
+}
+
 export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
   const [view, setView] = useState<View>("chains");
   const [metric, setMetric] = useState<Metric>("net");
+  const [protocol, setProtocol] = useState<Protocol>("aave");
   const [source, setSource] = useState<Source>(
     defiLlamaData ? "defillama" : "onchain"
   );
 
   const data = source === "defillama" ? defiLlamaData : onchainData;
 
+  const morphoAvailable = useMemo(() => {
+    if (!data) return false;
+    return data.assets.some((r) => r.protocol === "morpho");
+  }, [data]);
+
+  // If user picked Morpho but switched to DefiLlama (no Morpho there), reset
+  useEffect(() => {
+    if (protocol === "morpho" && !morphoAvailable) {
+      setProtocol("aave");
+    }
+  }, [morphoAvailable, protocol]);
+
   if (!data) {
     return (
       <div className="p-6 rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300">
-        No data available for {source}. Check that{" "}
-        {source === "defillama"
-          ? "DefiLlama API is reachable"
-          : "public/data/onchain.json exists"}
-        .
+        No data available for {source}.
       </div>
     );
   }
 
-  const rows = view === "chains" ? data.chains : data.assets;
-  const totals =
-    view === "chains" ? data.chainTotals[metric] : data.assetTotals[metric];
+  const allRows = view === "chains" ? data.chains : data.assets;
+  const filteredRows = allRows.filter((r) => r.protocol === protocol);
+  const totals = computeTotals(filteredRows, metric, data.dates.length);
   const nameHeader = view === "chains" ? "Chain" : "Asset";
 
   const sourceDesc =
     source === "defillama"
       ? "Aggregator TVL (daily snapshots, ~4h lag)"
-      : "Direct RPC reads via Alchemy (5 chains, refreshed daily)";
+      : "Direct RPC reads via Alchemy (refreshed daily)";
 
   const Button = ({
     active,
@@ -66,13 +91,15 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
     active: boolean;
     onClick: () => void;
     disabled?: boolean;
-    color?: "zinc" | "blue" | "emerald";
+    color?: "zinc" | "blue" | "emerald" | "purple" | "cyan";
     children: React.ReactNode;
   }) => {
     const activeColors = {
       zinc: "bg-zinc-900 text-white dark:bg-white dark:text-black",
       blue: "bg-blue-600 text-white",
       emerald: "bg-emerald-600 text-white",
+      purple: "bg-purple-600 text-white",
+      cyan: "bg-cyan-600 text-white",
     };
     return (
       <button
@@ -81,7 +108,7 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
         className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
           active
             ? activeColors[color] + " font-medium"
-            : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40"
+            : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
         }`}
       >
         {children}
@@ -113,6 +140,24 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
           </div>
 
           <div className="inline-flex rounded-lg border border-zinc-300 dark:border-zinc-700 p-1 bg-white dark:bg-zinc-900">
+            <Button
+              active={protocol === "aave"}
+              onClick={() => setProtocol("aave")}
+              color="purple"
+            >
+              {PROTOCOL_LABELS.aave}
+            </Button>
+            <Button
+              active={protocol === "morpho"}
+              onClick={() => setProtocol("morpho")}
+              disabled={!morphoAvailable}
+              color="cyan"
+            >
+              {PROTOCOL_LABELS.morpho}
+            </Button>
+          </div>
+
+          <div className="inline-flex rounded-lg border border-zinc-300 dark:border-zinc-700 p-1 bg-white dark:bg-zinc-900">
             <Button active={view === "chains"} onClick={() => setView("chains")}>
               By chain
             </Button>
@@ -136,37 +181,50 @@ export default function TvlDashboard({ defiLlamaData, onchainData }: Props) {
         <div className="text-xs text-zinc-500 dark:text-zinc-400 text-right">
           <div>
             <span className="font-medium text-zinc-700 dark:text-zinc-300">
-              {METRIC_LABELS[metric]}
+              {PROTOCOL_LABELS[protocol]} · {METRIC_LABELS[metric]}
             </span>
-            : {METRIC_DESC[metric]}
           </div>
+          <div>{METRIC_DESC[metric]}</div>
           <div>{sourceDesc}</div>
           <div>Last snapshot: {new Date(data.updatedAt).toUTCString()}</div>
         </div>
       </div>
 
-      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-950">
-        <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Top-5 {view === "chains" ? "chains" : "assets"} + total (
-          {METRIC_LABELS[metric]}), orange line = hack day
+      {filteredRows.length === 0 ? (
+        <div className="p-6 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400">
+          No {PROTOCOL_LABELS[protocol]} data in {source === "defillama" ? "DefiLlama" : "on-chain"} source.
+          {protocol === "morpho" && source === "defillama" && (
+            <> Switch to On-chain to see Morpho.</>
+          )}
         </div>
-        <TvlChart
-          rows={rows}
-          metric={metric}
-          dates={data.dates}
-          hackDateIndex={data.hackDateIndex}
-          totals={totals}
-        />
-      </div>
+      ) : (
+        <>
+          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-950">
+            <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
+              Top-5 {view === "chains" ? "chains" : "assets"} + total (
+              {METRIC_LABELS[metric]}), orange line = hack day
+            </div>
+            <TvlChart
+              rows={filteredRows}
+              metric={metric}
+              dates={data.dates}
+              hackDateIndex={data.hackDateIndex}
+              totals={totals}
+              showProtocol={false}
+            />
+          </div>
 
-      <TvlTable
-        rows={rows}
-        metric={metric}
-        dates={data.dates}
-        hackDateIndex={data.hackDateIndex}
-        totals={totals}
-        nameHeader={nameHeader}
-      />
+          <TvlTable
+            rows={filteredRows}
+            metric={metric}
+            dates={data.dates}
+            hackDateIndex={data.hackDateIndex}
+            totals={totals}
+            nameHeader={nameHeader}
+            showProtocol={false}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -60,6 +60,7 @@ type Props = {
   hackDateIndex: number;
   totals: number[];
   nameHeader: string;
+  showProtocol?: boolean;
 };
 
 export default function TvlTable({
@@ -69,6 +70,7 @@ export default function TvlTable({
   hackDateIndex,
   totals,
   nameHeader,
+  showProtocol = true,
 }: Props) {
   const totalBaseline = totals[hackDateIndex];
   const totalLatest = totals[totals.length - 1];
@@ -115,7 +117,7 @@ export default function TvlTable({
               >
                 <td className="px-3 py-2 font-medium sticky left-0 bg-white dark:bg-black whitespace-nowrap">
                   {row.name}
-                  <ProtocolBadge protocol={row.protocol} />
+                  {showProtocol && <ProtocolBadge protocol={row.protocol} />}
                 </td>
                 {values.map((v, i) => (
                   <td

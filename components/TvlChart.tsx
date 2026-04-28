@@ -40,6 +40,7 @@ type Props = {
   hackDateIndex: number;
   totals: number[];
   topN?: number;
+  showProtocol?: boolean;
 };
 
 export default function TvlChart({
@@ -49,10 +50,13 @@ export default function TvlChart({
   hackDateIndex,
   totals,
   topN = 5,
+  showProtocol = true,
 }: Props) {
   const top = rows.slice(0, topN);
   const labelOf = (r: Row) =>
-    `${r.name} (${r.protocol === "aave" ? "Aave" : "Morpho"})`;
+    showProtocol
+      ? `${r.name} (${r.protocol === "aave" ? "Aave" : "Morpho"})`
+      : r.name;
   const chartData = dates.map((date, i) => {
     const point: Record<string, string | number> = {
       date,
